@@ -153,6 +153,8 @@
     <ClCompile Include="ServerSocket.cpp" />
     <ClCompile Include="Socket.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="WinapiMutex.cpp" />
+    <ClCompile Include="WinapiThreadAdaptor.cpp" />
     <ClCompile Include="WinsockManager.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -161,6 +163,8 @@
     <ClInclude Include="ServerSocket.h" />
     <ClInclude Include="Socket.h" />
     <ClInclude Include="TxProtocol.h" />
+    <ClInclude Include="WinapiMutex.h" />
+    <ClInclude Include="WinapiThreadAdaptor.h" />
     <ClInclude Include="WinsockManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
