@@ -13,7 +13,7 @@
 #define DLL_WINSOCK_VERSION MAKEWORD(2, 2)
 #define MAX_SOCKETS_CONNECTION 1
 
-#define WM_YOUR_MESSAGE (WM_USER + 10)
+#define WM_MESSAGE (WM_USER + 10)
 
 // okno dialogowe CMultiuserTcpServerUIDlg
 class CMultiuserTcpServerUIDlg : public CDialogEx
@@ -23,8 +23,8 @@ public:
 	CMultiuserTcpServerUIDlg(CWnd* pParent = nullptr);	// konstruktor standardowy
 	~CMultiuserTcpServerUIDlg();	// destruktor
 
-	//the message handler
-	afx_msg LRESULT OnYourMessage(WPARAM wParam, LPARAM lParam);
+	//the message handlers
+	afx_msg LRESULT OnMessage(WPARAM wParam, LPARAM lParam);
 
 // Dane okna dialogowego
 #ifdef AFX_DESIGN_TIME
@@ -56,4 +56,5 @@ public:
 	bool isStopButtonActive;
    uint32_t port;
 	afx_msg void OnBnClickedButtonStop();
+   uint8_t clientsCount;
 };

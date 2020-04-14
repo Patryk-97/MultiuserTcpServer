@@ -2,7 +2,8 @@
 
 ServerSocket::ServerSocket() : Socket()
 {
-
+   this->isStopped = false;
+   this->winapiMutex = std::make_unique<WinapiMutex>();
 }
 
 ServerSocket::~ServerSocket()
@@ -88,15 +89,16 @@ void ServerSocket::listenThreadImpl(CDialog* currentDialog)
    {
       wparam.Format(L"Waiting for new client ...");
       lparam.Format(L"");
-      currentDialog->SendMessage(WM_YOUR_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+      currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
 
       ClientSocket* clientSocket = this->accept();
       if (clientSocket != nullptr)
       {
+         currentDialog->SendMessage(WM_MESSAGE, NULL, NULL);
          clientLocalAddressIp = clientSocket->getLocalAddressIp().c_str();
          wparam.Format(L"New client [%s, ", clientLocalAddressIp);
-         lparam.Format(L"%u] connected with Server", (unsigned)clientSocket->getLocalPort());
-         currentDialog->SendMessage(WM_YOUR_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+         lparam.Format(L"%u] connected with Server\r\n", (unsigned)clientSocket->getLocalPort());
+         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
 
          Socket* sockets[] = { this, clientSocket };
          auto pair = std::make_pair((Socket**)sockets, (CDialog*)currentDialog);
@@ -106,10 +108,24 @@ void ServerSocket::listenThreadImpl(CDialog* currentDialog)
       }
       else
       {
+         this->winapiMutex->lock();
+         if (isStopped)
+         {
+            break;
+         }
+         this->winapiMutex->unlock();
+
          wparam.Format(L"Error occurred when new client tried to connect with server");
          lparam.Format(L"");
-         currentDialog->SendMessage(WM_YOUR_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
       }
+
+      this->winapiMutex->lock();
+      if (isStopped)
+      {
+         break;
+      }
+      this->winapiMutex->unlock();
    }
 }
 
@@ -142,13 +158,13 @@ void ServerSocket::clientThreadImpl(ClientSocket* clientSocket, CDialog* current
          wparam.Format(L"Message (%d bytes) from client [%s, ",
             bytesReceived, clientLocalAddressIp);
          lparam.Format(L"%u ]: %s\r\n", (unsigned)clientSocket->getLocalPort(), receiveBuffer);
-         currentDialog->SendMessage(WM_YOUR_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
 
          if (true == clientSocket->send(recvBuff, bytesReceived))
          {
             wparam.Format(L"Reply message to client: %s", receiveBuffer);
             lparam.Format(L"");
-            currentDialog->SendMessage(WM_YOUR_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+            currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
          }
          else
          {
@@ -156,7 +172,7 @@ void ServerSocket::clientThreadImpl(ClientSocket* clientSocket, CDialog* current
 
             wparam.Format(L"Reply message has not sent\r\n");
             lparam.Format(L"Error: %s", errorMessage);
-            currentDialog->SendMessage(WM_YOUR_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+            currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
             clientSocket->close();
             break;
          }
@@ -166,8 +182,8 @@ void ServerSocket::clientThreadImpl(ClientSocket* clientSocket, CDialog* current
          clientLocalAddressIp = clientSocket->getLocalAddressIp().c_str();
 
          wparam.Format(L"Client [%s, ", clientLocalAddressIp);
-         lparam.Format(L"%u] disconnected", (unsigned)clientSocket->getLocalPort());
-         currentDialog->SendMessage(WM_YOUR_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+         lparam.Format(L"%u] disconnected\r\n", (unsigned)clientSocket->getLocalPort());
+         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
          clientSocket->close();
       }
       else
@@ -176,10 +192,16 @@ void ServerSocket::clientThreadImpl(ClientSocket* clientSocket, CDialog* current
 
          wparam.Format(L"Error occured while server was waiting for message from client\n");
          lparam.Format(L"Error: %s", errorMessage);
-         currentDialog->SendMessage(WM_YOUR_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
          clientSocket->close();
       }
 
+      this->winapiMutex->lock();
+      if (isStopped)
+      {
+         delete clientSocket; break;
+      }
+      this->winapiMutex->unlock();
+
    } while (bytesReceived > 0);
-   delete clientSocket;
 }

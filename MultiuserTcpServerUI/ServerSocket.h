@@ -4,7 +4,12 @@
 #define __SERVER_SOCKET_H__
 
 #define RECV_BUFF_SIZE 4096
-#define WM_YOUR_MESSAGE (WM_USER + 10)
+
+#ifndef WM_USER
+#define WM_USER 0x0400
+#endif
+
+#define WM_MESSAGE (WM_USER + 10)
 
 #include <afxwin.h>
 
@@ -12,8 +17,10 @@
 #include "ClientSocket.h"
 #include "WinapiThreadAdaptor.h"
 #include "WinsockManager.h"
+#include "WinapiMutex.h"
 
-#include <iostream>
+#include <atomic>
+#include <memory>
 
 class ServerSocket : public Socket
 {
@@ -28,6 +35,9 @@ public:
    void listenThreadImpl(CDialog* currentDialog);
    static uint32_t clientThread(void* arg);
    void clientThreadImpl(ClientSocket* clientSocket, CDialog* currentDialog);
+
+   std::atomic<bool> isStopped;
+   std::unique_ptr<WinapiMutex> winapiMutex;
 };
 
 #endif //__SERVER_SOCKET_H__

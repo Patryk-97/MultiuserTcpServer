@@ -54,6 +54,7 @@ CMultiuserTcpServerUIDlg::CMultiuserTcpServerUIDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_MULTIUSERTCPSERVERUI_DIALOG, pParent)
 	, logs(_T(""))
    , port(7)
+   , clientsCount(0)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	winsockManager = std::make_unique<WinsockManager>();
@@ -67,14 +68,21 @@ CMultiuserTcpServerUIDlg::~CMultiuserTcpServerUIDlg()
 
 }
 
-afx_msg LRESULT CMultiuserTcpServerUIDlg::OnYourMessage(WPARAM wParam, LPARAM lParam)
+afx_msg LRESULT CMultiuserTcpServerUIDlg::OnMessage(WPARAM wParam, LPARAM lParam)
 {
-	CString* wparam = (CString*)wParam;
-	CString* lparam = (CString*)lParam;
+	if (lParam != NULL)
+	{
+		CString* wparam = (CString*)wParam;
+		CString* lparam = (CString*)lParam;
 
-	CString tempCString;
-	tempCString.Format(L"%s%s\r\n", *wparam, *lparam);
-	logs = tempCString + logs;
+		CString tempCString;
+		tempCString.Format(L"%s%s\r\n", *wparam, *lparam);
+		logs = tempCString + logs;
+	}
+	else
+	{
+		++clientsCount;
+	}
 	UpdateData(false);
 
 	return 0;
@@ -85,6 +93,7 @@ void CMultiuserTcpServerUIDlg::DoDataExchange(CDataExchange* pDX)
    CDialogEx::DoDataExchange(pDX);
    DDX_Text(pDX, IDC_EDIT_LOGS, logs);
    DDX_Text(pDX, IDC_EDIT_PORT, port);
+   DDX_Text(pDX, IDC_STATIC_CLIENTS_COUNT, clientsCount);
 }
 
 BEGIN_MESSAGE_MAP(CMultiuserTcpServerUIDlg, CDialogEx)
@@ -95,7 +104,7 @@ BEGIN_MESSAGE_MAP(CMultiuserTcpServerUIDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_START, &CMultiuserTcpServerUIDlg::OnBnClickedButtonStart)
 	ON_EN_CHANGE(IDC_EDIT_LOGS, &CMultiuserTcpServerUIDlg::OnEnChangeEditLogs)
 	ON_BN_CLICKED(IDC_BUTTON_STOP, &CMultiuserTcpServerUIDlg::OnBnClickedButtonStop)
-	ON_MESSAGE(WM_YOUR_MESSAGE, OnYourMessage)
+	ON_MESSAGE(WM_MESSAGE, OnMessage)
 END_MESSAGE_MAP()
 
 
@@ -276,7 +285,8 @@ void CMultiuserTcpServerUIDlg::OnBnClickedButtonStart()
 
 	auto pair = std::make_pair((ServerSocket*)serverSocket.get(), (CDialog*)this);
 
-	WinapiThreadAdaptor winapiThreadAdaptor(ServerSocket::listenThread, &pair);
+	std::unique_ptr<WinapiThreadAdaptor> listenThread =
+		std::make_unique<WinapiThreadAdaptor>(ServerSocket::listenThread, &pair);
 }
 
 void CMultiuserTcpServerUIDlg::OnEnChangeEditLogs()
@@ -289,6 +299,11 @@ void CMultiuserTcpServerUIDlg::OnBnClickedButtonStop()
 {
 	if (true == isStopButtonActive)
 	{
+		serverSocket->winapiMutex->lock();
+		serverSocket->isStopped = true;
+		logs = _T("Closing...\r\n") + logs;
+		serverSocket->winapiMutex->unlock();
+		WinapiThreadAdaptor::sleep(1000);
 		serverSocket->close();
 		logs = _T("Server socket closed\r\n") + logs;
 		winsockManager->cleanup();
