@@ -5,7 +5,6 @@
 #include <iostream>
 #include <string>
 #include <memory>
-#include <atomic>
 
 #define DLL_WINSOCK_VERSION MAKEWORD(2, 2)
 #define MAX_SOCKETS_CONNECTION 1
