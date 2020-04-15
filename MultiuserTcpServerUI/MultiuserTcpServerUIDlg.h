@@ -11,9 +11,12 @@
 #include <memory>
 
 #define DLL_WINSOCK_VERSION MAKEWORD(2, 2)
-#define MAX_SOCKETS_CONNECTION 1
+#define MAX_SOCKETS_CONNECTION 3
 
 #define WM_MESSAGE (WM_USER + 10)
+#define PRINT_LOG 1
+#define INCREMENT_CLIENTS_COUNT 2
+#define DECREMENT_CLIENTS_COUNT 3
 
 // okno dialogowe CMultiuserTcpServerUIDlg
 class CMultiuserTcpServerUIDlg : public CDialogEx
@@ -57,4 +60,5 @@ public:
    uint32_t port;
 	afx_msg void OnBnClickedButtonStop();
    uint8_t clientsCount;
+	std::unique_ptr<CWinThread> listenThread;
 };

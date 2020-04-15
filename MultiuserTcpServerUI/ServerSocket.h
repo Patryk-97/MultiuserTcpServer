@@ -4,12 +4,16 @@
 #define __SERVER_SOCKET_H__
 
 #define RECV_BUFF_SIZE 4096
+#define MAX_SOCKETS_CONNECTION 3
 
 #ifndef WM_USER
 #define WM_USER 0x0400
 #endif
 
 #define WM_MESSAGE (WM_USER + 10)
+#define PRINT_LOG 1
+#define INCREMENT_CLIENTS_COUNT 2
+#define DECREMENT_CLIENTS_COUNT 3
 
 #include <afxwin.h>
 
@@ -38,6 +42,9 @@ public:
 
    std::atomic<bool> isStopped;
    std::unique_ptr<WinapiMutex> winapiMutex;
+
+private:
+   uint8_t socketConnections;
 };
 
 #endif //__SERVER_SOCKET_H__

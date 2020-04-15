@@ -61,6 +61,7 @@ CMultiuserTcpServerUIDlg::CMultiuserTcpServerUIDlg(CWnd* pParent /*=nullptr*/)
 	serverSocket = nullptr;
 	isStartButtonActive = true;
 	isStopButtonActive = false;
+	listenThread = nullptr;
 }
 
 CMultiuserTcpServerUIDlg::~CMultiuserTcpServerUIDlg()
@@ -70,19 +71,23 @@ CMultiuserTcpServerUIDlg::~CMultiuserTcpServerUIDlg()
 
 afx_msg LRESULT CMultiuserTcpServerUIDlg::OnMessage(WPARAM wParam, LPARAM lParam)
 {
-	if (lParam != NULL)
+	if (wParam == PRINT_LOG)
 	{
-		CString* wparam = (CString*)wParam;
 		CString* lparam = (CString*)lParam;
 
 		CString tempCString;
-		tempCString.Format(L"%s%s\r\n", *wparam, *lparam);
+		tempCString.Format(L"%s\r\n", *lparam);
 		logs = tempCString + logs;
 	}
-	else
+	else if(wParam == INCREMENT_CLIENTS_COUNT)
 	{
 		++clientsCount;
 	}
+	else
+	{
+		--clientsCount;
+	}
+
 	UpdateData(false);
 
 	return 0;
@@ -285,8 +290,8 @@ void CMultiuserTcpServerUIDlg::OnBnClickedButtonStart()
 
 	auto pair = std::make_pair((ServerSocket*)serverSocket.get(), (CDialog*)this);
 
-	std::unique_ptr<WinapiThreadAdaptor> listenThread =
-		std::make_unique<WinapiThreadAdaptor>(ServerSocket::listenThread, &pair);
+	listenThread.reset(AfxBeginThread(ServerSocket::listenThread, &pair, 0, CREATE_SUSPENDED));
+	listenThread->m_bAutoDelete = FALSE;
 }
 
 void CMultiuserTcpServerUIDlg::OnEnChangeEditLogs()
@@ -303,8 +308,8 @@ void CMultiuserTcpServerUIDlg::OnBnClickedButtonStop()
 		serverSocket->isStopped = true;
 		logs = _T("Closing...\r\n") + logs;
 		serverSocket->winapiMutex->unlock();
-		WinapiThreadAdaptor::sleep(1000);
 		serverSocket->close();
+		::WaitForSingleObject(listenThread->m_hThread, INFINITE);
 		logs = _T("Server socket closed\r\n") + logs;
 		winsockManager->cleanup();
 		UpdateData(false);

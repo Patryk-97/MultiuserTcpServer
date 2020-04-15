@@ -4,6 +4,7 @@ ServerSocket::ServerSocket() : Socket()
 {
    this->isStopped = false;
    this->winapiMutex = std::make_unique<WinapiMutex>();
+   this->socketConnections = 0;
 }
 
 ServerSocket::~ServerSocket()
@@ -83,28 +84,43 @@ uint32_t ServerSocket::listenThread(void* arg)
 void ServerSocket::listenThreadImpl(CDialog* currentDialog)
 {
    // locals
-   CString wparam, lparam, clientLocalAddressIp;
+   uint32_t messageType;
+   CString lparam, clientLocalAddressIp;
+   int send;
 
    while (true)
    {
-      wparam.Format(L"Waiting for new client ...");
-      lparam.Format(L"");
-      currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+      messageType = PRINT_LOG;
+      lparam.Format(L"Waiting for new client ...");
+      currentDialog->SendMessage(WM_MESSAGE, (WPARAM)messageType, (LPARAM)&lparam);
 
       ClientSocket* clientSocket = this->accept();
+      ++this->socketConnections;
       if (clientSocket != nullptr)
       {
-         currentDialog->SendMessage(WM_MESSAGE, NULL, NULL);
-         clientLocalAddressIp = clientSocket->getLocalAddressIp().c_str();
-         wparam.Format(L"New client [%s, ", clientLocalAddressIp);
-         lparam.Format(L"%u] connected with Server\r\n", (unsigned)clientSocket->getLocalPort());
-         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+         if (this->socketConnections > MAX_SOCKETS_CONNECTION)
+         {
+            clientSocket->send("Too many sockets connected to server!", send);
+            clientSocket->close();
+            delete clientSocket;
+         }
+         else
+         {
+            currentDialog->SendMessage(WM_MESSAGE, (WPARAM)INCREMENT_CLIENTS_COUNT, NULL);
 
-         Socket* sockets[] = { this, clientSocket };
-         auto pair = std::make_pair((Socket**)sockets, (CDialog*)currentDialog);
+            clientLocalAddressIp = clientSocket->getLocalAddressIp().c_str();
 
-         std::unique_ptr<WinapiThreadAdaptor> clientThread =
-            std::make_unique<WinapiThreadAdaptor>(ServerSocket::clientThread, &pair);
+            messageType = PRINT_LOG;
+            lparam.Format(L"New client [%s, %u] connected with Server\r\n",
+               clientLocalAddressIp, (unsigned)clientSocket->getLocalPort());
+            currentDialog->SendMessage(WM_MESSAGE, (WPARAM)messageType, (LPARAM)&lparam);
+
+            Socket* sockets[] = { this, clientSocket };
+            auto pair = std::make_pair((Socket**)sockets, (CDialog*)currentDialog);
+
+            std::unique_ptr<WinapiThreadAdaptor> clientThread =
+               std::make_unique<WinapiThreadAdaptor>(ServerSocket::clientThread, &pair);
+         }
       }
       else
       {
@@ -115,9 +131,9 @@ void ServerSocket::listenThreadImpl(CDialog* currentDialog)
          }
          this->winapiMutex->unlock();
 
-         wparam.Format(L"Error occurred when new client tried to connect with server");
-         lparam.Format(L"");
-         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+         messageType = PRINT_LOG;
+         lparam.Format(L"Error occurred when new client tried to connect with server");
+         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)messageType, (LPARAM)&lparam);
       }
 
       this->winapiMutex->lock();
@@ -145,7 +161,8 @@ void ServerSocket::clientThreadImpl(ClientSocket* clientSocket, CDialog* current
    // locals
    int bytesReceived = 0;
    char recvBuff[RECV_BUFF_SIZE];
-   CString wparam, lparam, clientLocalAddressIp, receiveBuffer, errorMessage;
+   uint32_t messageType;
+   CString lparam, clientLocalAddressIp, receiveBuffer, errorMessage;
 
    do
    {
@@ -155,24 +172,25 @@ void ServerSocket::clientThreadImpl(ClientSocket* clientSocket, CDialog* current
          receiveBuffer = recvBuff;
          receiveBuffer.AppendChar('\0');
 
-         wparam.Format(L"Message (%d bytes) from client [%s, ",
-            bytesReceived, clientLocalAddressIp);
-         lparam.Format(L"%u ]: %s\r\n", (unsigned)clientSocket->getLocalPort(), receiveBuffer);
-         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+         messageType = PRINT_LOG;
+         lparam.Format(L"Message (%d bytes) from client [%s, %u ]: %s\r\n",
+            bytesReceived, clientLocalAddressIp, (unsigned)clientSocket->getLocalPort(),
+            receiveBuffer);
+         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)messageType, (LPARAM)&lparam);
 
          if (true == clientSocket->send(recvBuff, bytesReceived))
          {
-            wparam.Format(L"Reply message to client: %s", receiveBuffer);
-            lparam.Format(L"");
-            currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+            messageType = PRINT_LOG;
+            lparam.Format(L"Reply message to client: %s", receiveBuffer);
+            currentDialog->SendMessage(WM_MESSAGE, (WPARAM)messageType, (LPARAM)&lparam);
          }
          else
          {
             errorMessage = WinsockManager::getErrorMessage().c_str();
 
-            wparam.Format(L"Reply message has not sent\r\n");
-            lparam.Format(L"Error: %s", errorMessage);
-            currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+            messageType = PRINT_LOG;
+            lparam.Format(L"Reply message has not sent\r\nError: %s", errorMessage);
+            currentDialog->SendMessage(WM_MESSAGE, (WPARAM)messageType, (LPARAM)&lparam);
             clientSocket->close();
             break;
          }
@@ -181,18 +199,23 @@ void ServerSocket::clientThreadImpl(ClientSocket* clientSocket, CDialog* current
       {
          clientLocalAddressIp = clientSocket->getLocalAddressIp().c_str();
 
-         wparam.Format(L"Client [%s, ", clientLocalAddressIp);
-         lparam.Format(L"%u] disconnected\r\n", (unsigned)clientSocket->getLocalPort());
-         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+         messageType = PRINT_LOG;
+         lparam.Format(L"Client [%s, %u] disconnected\r\n", clientLocalAddressIp,
+            (unsigned)clientSocket->getLocalPort());
+         --this->socketConnections;
+         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)DECREMENT_CLIENTS_COUNT, NULL);
+         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)messageType, (LPARAM)&lparam);
          clientSocket->close();
       }
       else
       {
          errorMessage = WinsockManager::getErrorMessage().c_str();
 
-         wparam.Format(L"Error occured while server was waiting for message from client\n");
-         lparam.Format(L"Error: %s", errorMessage);
-         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)&wparam, (LPARAM)&lparam);
+         messageType = PRINT_LOG;
+         lparam.Format(
+            L"Error occured while server was waiting for message from client\r\nError: %s",
+            errorMessage);
+         currentDialog->SendMessage(WM_MESSAGE, (WPARAM)messageType, (LPARAM)&lparam);
          clientSocket->close();
       }
 
